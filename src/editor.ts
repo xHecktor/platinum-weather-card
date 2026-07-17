@@ -530,6 +530,10 @@ get _forecast_type(): string {
     return this._config?.entity_pos_1 || '';
   }
 
+  get _entity_sun_hours_1(): string {
+    return this._config?.entity_sun_hours_1 || '';
+  }
+
   get _entity_extended_1(): string {
     return this._config?.entity_extended_1 || '';
   }
@@ -1276,6 +1280,9 @@ get _forecast_type(): string {
       </ha-entity-picker>
       <ha-entity-picker .hass=${this.hass} .configValue=${'entity_pos_1'} .value=${this._entity_pos_1}  .includeDomains=${['sensor', 'weather']}
         name="entity_pos_1" label="Entity Forecast Possible Rain 1" allow-custom-entity @value-changed=${this._valueChangedPicker}>
+      </ha-entity-picker>
+      <ha-entity-picker .hass=${this.hass} .configValue=${'entity_sun_hours_1'} .value=${this._entity_sun_hours_1}  .includeDomains=${['sensor', 'weather']}
+        name="entity_sun_hours_1" label="Entity Forecast Sunshine Hours 1" allow-custom-entity @value-changed=${this._valueChangedPicker}>
       </ha-entity-picker>
       ${this._daily_forecast_layout === 'vertical' ? html`
         <ha-entity-picker .hass=${this.hass} .configValue=${'entity_extended_1'} .value=${this._entity_extended_1} .includeDomains=${['sensor', 'weather']}
