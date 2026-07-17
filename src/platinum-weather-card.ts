@@ -1233,8 +1233,9 @@ export class PlatinumWeatherCard extends LitElement {
     } else {
       const stateObj = this.hass.states[configEntity];
       if (stateObj && Array.isArray(stateObj.attributes.data)) {
-        // sensor with hourly 'data' attribute in seconds per hour (e.g. DWD)
-        hours = this._getSunHoursFromHourlyData(stateObj.attributes.data, date);
+        // sensor with an hourly 'data' attribute (e.g. DWD 'Sonnenscheindauer').
+        // The per-hour duration unit is taken from the sensor's unit_of_measurement.
+        hours = this._getSunHoursFromHourlyData(stateObj.attributes.data, date, stateObj.attributes.unit_of_measurement);
       } else {
         // numbered daily sensor whose state is already in hours (e.g. AccuWeather)
         const start = configEntity.match(/(\d+)(?!.*\d)/g);
@@ -1252,15 +1253,26 @@ export class PlatinumWeatherCard extends LitElement {
     return Math.round(hours * 10) / 10;
   }
 
-  //tjl Sum the hourly sunshine seconds for a single day and convert to hours.
-  private _getSunHoursFromHourlyData(data: Array<any>, date: Date): number | undefined {
+  //tjl Sum the hourly sunshine durations for a single day and convert them to hours.
+  //  The unit of each 'value' comes from the sensor's unit_of_measurement so this works
+  //  regardless of which integration/station provides the sensor (DWD reports seconds).
+  private _getSunHoursFromHourlyData(data: Array<any>, date: Date, unit?: string): number | undefined {
     const day = date.toDateString();
     const entries = data.filter(o => o && o.datetime !== undefined && new Date(o.datetime).toDateString() === day);
     if (entries.length === 0) {
       return undefined;
     }
-    const totalSeconds = entries.reduce((sum, o) => sum + (Number(o.value) || 0), 0);
-    return totalSeconds / 3600;
+    const total = entries.reduce((sum, o) => sum + (Number(o.value) || 0), 0);
+    // Convert the summed duration to hours based on the sensor's unit (default: seconds).
+    const u = (unit || 's').toString().toLowerCase();
+    if (u === 'h' || u.startsWith('hour') || u === 'hr' || u === 'hrs') {
+      return total;
+    }
+    if (u === 'min' || u.startsWith('minute') || u === 'm') {
+      return total / 60;
+    }
+    // seconds (s / sec / seconds) or anything unrecognised
+    return total / 3600;
   }
 
   private _getCardSizeDailyForecastSection(): number {
