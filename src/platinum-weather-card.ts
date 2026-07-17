@@ -758,10 +758,11 @@ export class PlatinumWeatherCard extends LitElement {
   private _renderHorizontalDailyForecastSection(): TemplateResult {
     const htmlDays: TemplateResult[] = [];
     const days = this._config.daily_forecast_days || 5;
+    const dayOffset = this._config.daily_forecast_today ? 0 : 1;
 
     for (var i = 0; i < days; i++) {
       const forecastDate = new Date();
-      forecastDate.setDate(forecastDate.getDate() + i + 1);
+      forecastDate.setDate(forecastDate.getDate() + i + dayOffset);
       var htmlIcon: TemplateResult;
       var maxTemp: string | undefined;
       var minTemp: string | undefined;
@@ -938,10 +939,11 @@ export class PlatinumWeatherCard extends LitElement {
   private _renderVerticalDailyForecastSection(): TemplateResult {
     const htmlDays: TemplateResult[] = [];
     const days = this._config.daily_forecast_days || 5;
+    const dayOffset = this._config.daily_forecast_today ? 0 : 1;
 
     for (var i = 0; i < days; i++) {
       const forecastDate = new Date();
-      forecastDate.setDate(forecastDate.getDate() + i + 1);
+      forecastDate.setDate(forecastDate.getDate() + i + dayOffset);
       var htmlIcon: TemplateResult;
       var maxTemp: string | undefined;
       var minTemp: string | undefined;

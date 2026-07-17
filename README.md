@@ -401,6 +401,7 @@ double_tap_action:
 | forecast_type                  | String  | `daily`      | When using the main weather entity, this specifies the forecast type.  Only "Daily" is supported. _In the future, options for "Hourly" and "Twice Daily" may be supported._  |
 | daily_forecast_layout          | String  | `horizontal` | Format for layout `horizontal` or `vertical`                               |
 | daily_forecast_days            | Number  | `5`          | Number of days to include in forecast. `horizontal (1-5)` `vertical (1-7)` |
+| daily_forecast_today           | Boolean | `false`      | Start the daily forecast with the current day instead of tomorrow          |
 | option_tooltips                | Boolean | `false`      | Show forecast tooltips on horizontal forecast                              |
 | daily_extended_forecast_days   | Number  | `7`          | Show extended forecast. (only for vertical forecast `(1-7)`)               |
 | option_daily_color_fire_danger | Boolean | `true`       | Use color attributes from fire danger if set (oly for vertical forecast)   |

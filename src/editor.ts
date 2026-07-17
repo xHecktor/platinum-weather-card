@@ -493,6 +493,10 @@ export class WeatherCardEditor extends LitElement implements LovelaceCardEditor 
     return this._config?.daily_forecast_days || null;
   }
 
+  get _daily_forecast_today(): boolean {
+    return this._config?.daily_forecast_today === true;
+  }
+
   get _daily_extended_forecast_days(): extendedDays | null {
     return this._config?.daily_extended_forecast_days ?? null;
   }
@@ -1340,6 +1344,17 @@ get _forecast_type(): string {
           <mwc-list-item value="6">6</mwc-list-item>
           <mwc-list-item value="7">7</mwc-list-item>
         </ha-select>` : html`<div></div>`}
+      </div>
+
+      <div class="side-by-side">
+        <div>
+          <ha-formfield .label=${'Include current day'}>
+            <ha-switch .checked=${this._daily_forecast_today} .configValue=${'daily_forecast_today'}
+              @change=${this._valueChanged}>
+            </ha-switch>
+          </ha-formfield>
+        </div>
+        <div></div>
       </div>
 
         <div class="side-by-side">
