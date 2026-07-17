@@ -862,6 +862,7 @@ export class PlatinumWeatherCard extends LitElement {
 
       var pop: TemplateResult;
       var pos: TemplateResult;
+      var sunhours: TemplateResult;
       var tooltip: TemplateResult;
       if (this._config.entity_pop_1?.match('^weather.')) {
         const popEntity = this._config.entity_pop_1;
@@ -895,6 +896,10 @@ export class PlatinumWeatherCard extends LitElement {
         const posEntity = start && this._config.entity_pos_1 ? this._config.entity_pos_1.replace(/(\d+)(?!.*\d)/g, String(Number(start) + i)) : undefined;
         pos = start ? html`<li class="f-slot-horiz-text"><span><div class="pos">${posEntity && this.hass.states[posEntity] ? this.hass.states[posEntity].state : "---"}</div><div class="unit">${this.getUOM('precipitation')}</div></span></li>` : html``;
       }
+      const sunHoursValue = this._getSunHoursForForecast(forecastDate, i);
+      sunhours = this._config.entity_sun_hours_1
+        ? html`<li class="f-slot-horiz-text"><span><div class="slot-text sun-hours">${sunHoursValue !== undefined ? sunHoursValue : "---"}</div><div class="unit">h</div></span></li>`
+        : html``;
       if (this._config.entity_summary_1?.match('^weather.')) {
         const tooltipEntity = this._config.entity_summary_1;
 
@@ -924,6 +929,7 @@ export class PlatinumWeatherCard extends LitElement {
             ${minMax}
             ${pop}
             ${pos}
+            ${sunhours}
           </ul>
           ${tooltip}
         </div>
@@ -949,6 +955,7 @@ export class PlatinumWeatherCard extends LitElement {
       var minTemp: string | undefined;
       var pop: TemplateResult;
       var pos: TemplateResult;
+      var sunhours: TemplateResult;
       var fireDanger: TemplateResult;
       var condition: string | undefined; //tjl moved to here; changed to var
 
@@ -1076,8 +1083,15 @@ export class PlatinumWeatherCard extends LitElement {
           <div class="pos">${posEntity && this.hass.states[posEntity] ? this.hass.states[posEntity].state : "---"}</div>
           <div class="unit">${this.getUOM('precipitation')}</div></div>` : html``;
       }
+      const sunHoursValue = this._getSunHoursForForecast(forecastDate, i);
+      sunhours = this._config.entity_sun_hours_1
+        ? html`
+          <div class="f-slot-vert"><div class="f-label">Sunshine </div>
+          <div class="sun-hours">${sunHoursValue !== undefined ? sunHoursValue : "---"}</div>
+          <div class="unit">h</div></div>`
+        : html``;
 
-      //tjl Feature add for entity_extended_1  Add support for weather entity 
+      //tjl Feature add for entity_extended_1  Add support for weather entity
       //  This will require use of configured daily_extended_name_attr. 
       //tjl Use new forecast subscribe method
       var extended: TemplateResult = html``;
@@ -1157,6 +1171,7 @@ export class PlatinumWeatherCard extends LitElement {
             <div class="day-vert-rain">
               ${pop}
               ${pos}
+              ${sunhours}
             </div>
           </div>
           <div class="day-vert-bottom">
@@ -1191,6 +1206,75 @@ export class PlatinumWeatherCard extends LitElement {
     }
 
     return undefined;
+  }
+
+  //tjl Sunshine hours for a given forecast day.
+  //  Supports three data sources:
+  //    - a weather entity forecast property (sunshine / sun_hours / ...), assumed to be in hours
+  //    - a sensor with an hourly 'data' attribute where each value is sunshine seconds per hour
+  //      (e.g. DWD 'Sonnenscheindauer'); these are summed for the day and converted to hours
+  //    - a numbered daily sensor whose state is already in hours (e.g. AccuWeather 'Sonnenstunden Tag n')
+  //  Returns the value rounded to one decimal, or undefined when no data is available.
+  private _getSunHoursForForecast(date: Date, dayIndex: number): number | undefined {
+    const configEntity = this._config.entity_sun_hours_1;
+    if (!configEntity) {
+      return undefined;
+    }
+
+    var hours: number | undefined;
+
+    if (configEntity.match('^weather.')) {
+      // weather entity forecast property (best effort, assumed to already be in hours)
+      if (this.forecast1 !== undefined) {
+        const raw = this._getForecastPropFromWeather(this.forecast1, date, 'sunshine')
+          ?? this._getForecastPropFromWeather(this.forecast1, date, 'sun_hours')
+          ?? this._getForecastPropFromWeather(this.forecast1, date, 'sunshine_duration')
+          ?? this._getForecastPropFromWeather(this.forecast1, date, 'sun_duration');
+        hours = raw !== undefined ? Number(raw) : undefined;
+      }
+    } else {
+      const stateObj = this.hass.states[configEntity];
+      if (stateObj && Array.isArray(stateObj.attributes.data)) {
+        // sensor with an hourly 'data' attribute (e.g. DWD 'Sonnenscheindauer').
+        // The per-hour duration unit is taken from the sensor's unit_of_measurement.
+        hours = this._getSunHoursFromHourlyData(stateObj.attributes.data, date, stateObj.attributes.unit_of_measurement);
+      } else {
+        // numbered daily sensor whose state is already in hours (e.g. AccuWeather)
+        const start = configEntity.match(/(\d+)(?!.*\d)/g);
+        const numberedEntity = start ? configEntity.replace(/(\d+)(?!.*\d)/g, String(Number(start) + dayIndex)) : undefined;
+        const numberedState = numberedEntity ? this.hass.states[numberedEntity] : undefined;
+        if (numberedState && numberedState.state !== 'unknown' && numberedState.state !== 'unavailable') {
+          hours = Number(numberedState.state);
+        }
+      }
+    }
+
+    if (hours === undefined || isNaN(hours)) {
+      return undefined;
+    }
+    return Math.round(hours * 10) / 10;
+  }
+
+  //tjl Sum the hourly sunshine durations for a single day and convert them to hours.
+  //  The unit of each 'value' comes from the sensor's unit_of_measurement so this works
+  //  regardless of which integration/station provides the sensor (DWD reports seconds).
+  private _getSunHoursFromHourlyData(data: Array<any>, date: Date, unit?: string): number | undefined {
+    const day = date.toDateString();
+    const entries = data.filter(o => o && o.datetime !== undefined && new Date(o.datetime).toDateString() === day);
+    if (entries.length === 0) {
+      return undefined;
+    }
+    const total = entries.reduce((sum, o) => sum + (Number(o.value) || 0), 0);
+    // Convert the summed duration to hours based on the sensor's unit (default: seconds).
+    const u = (unit || 's').toString().toLowerCase();
+    if (u === 'h' || u.startsWith('hour') || u === 'hr' || u === 'hrs') {
+      return total;
+    }
+    if (u === 'min' || u.startsWith('minute') || u === 'm') {
+      return total / 60;
+    }
+    // seconds (s / sec / seconds) or anything unrecognised
+    return total / 3600;
   }
 
   private _getCardSizeDailyForecastSection(): number {
@@ -3028,6 +3112,12 @@ export class PlatinumWeatherCard extends LitElement {
         color: var(--primary-text-color);
       }
       .pos {
+        display: table-cell;
+        font-weight: 300;
+        color: var(--primary-text-color);
+        white-space: nowrap;
+      }
+      .sun-hours {
         display: table-cell;
         font-weight: 300;
         color: var(--primary-text-color);
