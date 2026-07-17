@@ -1213,13 +1213,21 @@ export class PlatinumWeatherCard extends LitElement {
   //    - a weather entity forecast property (sunshine / sun_hours / ...), assumed to be in hours
   //    - a sensor with an hourly 'data' attribute where each value is sunshine seconds per hour
   //      (e.g. DWD 'Sonnenscheindauer'); these are summed for the day and converted to hours
-  //    - a numbered daily sensor whose state is already in hours (e.g. AccuWeather 'Sonnenstunden Tag n')
+  //    - numbered daily sensors whose state is already in hours (e.g. AccuWeather 'Sonnenstunden Tag n')
+  //  When the current day is included in the forecast (daily_forecast_today), today's numbered
+  //  sensor is usually named differently (e.g. *_heute / *_today, not *_0), so a dedicated
+  //  entity_sun_hours_0 is used for that slot. Weather and DWD-style sources resolve today by
+  //  date automatically and do not need it.
   //  Returns the value rounded to one decimal, or undefined when no data is available.
   private _getSunHoursForForecast(date: Date, dayIndex: number): number | undefined {
     const configEntity = this._config.entity_sun_hours_1;
     if (!configEntity) {
       return undefined;
     }
+
+    // How many days ahead of today this slot represents (0 = today, 1 = tomorrow, ...).
+    const dayOffset = this._config.daily_forecast_today ? 0 : 1;
+    const daysFromToday = dayIndex + dayOffset;
 
     var hours: number | undefined;
 
@@ -1232,27 +1240,47 @@ export class PlatinumWeatherCard extends LitElement {
           ?? this._getForecastPropFromWeather(this.forecast1, date, 'sun_duration');
         hours = raw !== undefined ? Number(raw) : undefined;
       }
+    } else if (this.hass.states[configEntity] && Array.isArray(this.hass.states[configEntity].attributes.data)) {
+      // single sensor with an hourly 'data' attribute (e.g. DWD 'Sonnenscheindauer').
+      // It covers every day including today, so resolve purely by the forecast date.
+      hours = this._readDailySunHoursEntity(configEntity, date);
+    } else if (daysFromToday <= 0) {
+      // "today" slot for numbered daily sensors: today's sensor is named differently
+      // (e.g. *_heute / *_today) so it must be configured separately.
+      hours = this._readDailySunHoursEntity(this._config.entity_sun_hours_0, date);
     } else {
-      const stateObj = this.hass.states[configEntity];
-      if (stateObj && Array.isArray(stateObj.attributes.data)) {
-        // sensor with an hourly 'data' attribute (e.g. DWD 'Sonnenscheindauer').
-        // The per-hour duration unit is taken from the sensor's unit_of_measurement.
-        hours = this._getSunHoursFromHourlyData(stateObj.attributes.data, date, stateObj.attributes.unit_of_measurement);
-      } else {
-        // numbered daily sensor whose state is already in hours (e.g. AccuWeather)
-        const start = configEntity.match(/(\d+)(?!.*\d)/g);
-        const numberedEntity = start ? configEntity.replace(/(\d+)(?!.*\d)/g, String(Number(start) + dayIndex)) : undefined;
-        const numberedState = numberedEntity ? this.hass.states[numberedEntity] : undefined;
-        if (numberedState && numberedState.state !== 'unknown' && numberedState.state !== 'unavailable') {
-          hours = Number(numberedState.state);
-        }
-      }
+      // numbered daily sensors. entity_sun_hours_1 points at the first forecast day
+      // (tomorrow => daysFromToday 1), so the sensor number increments from there.
+      const start = configEntity.match(/(\d+)(?!.*\d)/g);
+      const numberedEntity = start ? configEntity.replace(/(\d+)(?!.*\d)/g, String(Number(start) + (daysFromToday - 1))) : undefined;
+      hours = this._readDailySunHoursEntity(numberedEntity, date);
     }
 
     if (hours === undefined || isNaN(hours)) {
       return undefined;
     }
     return Math.round(hours * 10) / 10;
+  }
+
+  //tjl Read a single sunshine-hours value (in hours) from an entity. Handles both a plain
+  //  daily sensor (state already in hours) and a sensor exposing an hourly 'data' attribute
+  //  that is summed for the given day. Returns undefined when unavailable.
+  private _readDailySunHoursEntity(entityId: string | undefined, date: Date): number | undefined {
+    if (!entityId) {
+      return undefined;
+    }
+    const stateObj = this.hass.states[entityId];
+    if (!stateObj) {
+      return undefined;
+    }
+    if (Array.isArray(stateObj.attributes.data)) {
+      return this._getSunHoursFromHourlyData(stateObj.attributes.data, date, stateObj.attributes.unit_of_measurement);
+    }
+    if (stateObj.state === 'unknown' || stateObj.state === 'unavailable') {
+      return undefined;
+    }
+    const value = Number(stateObj.state);
+    return isNaN(value) ? undefined : value;
   }
 
   //tjl Sum the hourly sunshine durations for a single day and convert them to hours.

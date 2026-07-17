@@ -113,6 +113,7 @@ export interface WeatherCardConfig extends LovelaceCardConfig {
   entity_pop_1?: string;
   entity_pos_1?: string;
   entity_sun_hours_1?: string;
+  entity_sun_hours_0?: string;
   entity_summary_1?: string;
   entity_forecast_min_1?: string;
   entity_forecast_max_1?: string;
